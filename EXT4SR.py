@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 #
-# Copyright (C) Vates SAS
+# Original work copyright (C) Citrix systems
+# Modified work copyright (C) Vates SAS and XCP-ng community
 #
 # This program is free software; you can redistribute it and/or modify 
 # it under the terms of the GNU Lesser General Public License as published 
