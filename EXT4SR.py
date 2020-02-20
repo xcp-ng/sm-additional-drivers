@@ -155,6 +155,11 @@ class EXT4SR(FileSR.FileSR):
                 EXT_PREFIX)
 
     def create(self, sr_uuid, size):
+        # THIS DRIVER IS DEPRECATED. RAISE.
+        raise Exception('The `ext4` SR type is deprecated since XCP-ng 8.1.\n'
+                        'Use the main `ext` driver instead. It will create an EXT4 filesystem now, '
+                        'not EXT3 anymore as it used to.')
+
         if self._checkmount():
             raise xs_errors.XenError('SRExists')
 
