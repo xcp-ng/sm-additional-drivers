@@ -1,14 +1,6 @@
 #!/usr/bin/python
 #
 #
-# XOSANSR: Xen Orchestra SAN filesystem based storage repository
-# the underlying system is gluster, rebranded as "xosan"
-# this file is mostly a copy/paste of SMBSR.py
-# This source code not open and property of Vates SAS.
-
-# TODO: check the CAPABILITIES and their meaning
-# TODO: try to understand and untangle the various log/exception systems in this file.
-
 
 import errno
 import os
@@ -35,8 +27,8 @@ def monkeyPatchedNormalizeType(type):
         type = cleanup.SR.TYPE_LVHD
     if type in ["lvm", "lvmoiscsi", "lvmohba", "lvmofcoe"]:
         type = cleanup.SR.TYPE_LVHD
-        # nraynaud: monkeypatch to add "xosan" to this list
-    if type in ["ext", "nfs", "ocfsoiscsi", "ocfsohba", "smb", "xosan"]:
+        # added "glusterfs" to this list
+    if type in ["ext", "nfs", "ocfsoiscsi", "ocfsohba", "smb", "glusterfs"]:
         type = cleanup.SR.TYPE_FILE
     if type not in cleanup.SR.TYPES:
         raise util.SMException("Unsupported SR type: %s" % type)
@@ -57,8 +49,8 @@ CONFIGURATION = [['server', 'Full path to share on gluster server (required, ex:
                  ]
 
 DRIVER_INFO = {
-    'name': 'XO SAN VHD',
-    'description': 'SR plugin which stores disks as VHD files on a Xen Orchestra SAN system',
+    'name': 'GlusterFS VHD',
+    'description': 'SR plugin which stores disks as VHD files on a GlusterFS storage',
     'vendor': 'Vates SAS',
     'copyright': '(C) 2017 Vates SAS',
     'driver_version': '1.0',
@@ -74,20 +66,20 @@ DRIVER_CONFIG = {"ATTACH_FROM_CONFIG_WITH_TAPDISK": True}
 PROBE_MOUNTPOINT = os.path.join(SR.MOUNT_BASE, "probe")
 
 
-class XOSANException(Exception):
+class GlusterFSException(Exception):
     def __init__(self, errstr):
         self.errstr = errstr
 
 
-# mountpoint = /var/run/sr-mount/XOSAN/<xosan_server_name>/uuid
+# mountpoint = /var/run/sr-mount/GlusterFS/<glusterfs_server_name>/uuid
 # linkpath = mountpoint/uuid - path to SR directory on share
 # path = /var/run/sr-mount/uuid - symlink to SR directory on share
-class XOSANSR(FileSR.FileSR):
+class GlusterFSSR(FileSR.FileSR):
     """Gluster file-based storage repository"""
 
     def handles(sr_type):
         # fudge, because the parent class (FileSR) checks for smb to alter its behavior
-        return sr_type == 'xosan' or sr_type == 'smb'
+        return sr_type == 'glusterfs' or sr_type == 'smb'
 
     handles = staticmethod(handles)
 
@@ -103,7 +95,7 @@ class XOSANSR(FileSR.FileSR):
             self.sm_config = self.session.xenapi.SR.get_sm_config(self.sr_ref)
         else:
             self.sm_config = self.srcmd.params.get('sr_sm_config') or {}
-        self.mountpoint = os.path.join(SR.MOUNT_BASE, 'XOSAN', self.remoteserver.split(':')[0], sr_uuid)
+        self.mountpoint = os.path.join(SR.MOUNT_BASE, 'GlusterFS', self.remoteserver.split(':')[0], sr_uuid)
         self.linkpath = os.path.join(self.mountpoint, sr_uuid or "")
         self.path = os.path.join(SR.MOUNT_BASE, sr_uuid)
         self._check_o_direct()
@@ -118,13 +110,13 @@ class XOSANSR(FileSR.FileSR):
         if mountpoint is None:
             mountpoint = self.mountpoint
         elif not util.is_string(mountpoint) or mountpoint == "":
-            raise XOSANException("mountpoint not a string object")
+            raise GlusterFSException("mountpoint not a string object")
 
         try:
             if not util.ioretry(lambda: util.isdir(mountpoint)):
                 util.ioretry(lambda: util.makedirs(mountpoint))
         except util.CommandException, inst:
-            raise XOSANException("Failed to make directory: code is %d" % inst.code)
+            raise GlusterFSException("Failed to make directory: code is %d" % inst.code)
         try:
             options = []
             if 'backupservers' in self.dconf:
@@ -136,8 +128,8 @@ class XOSANSR(FileSR.FileSR):
             command = ["mount", '-t', 'glusterfs', self.remoteserver, mountpoint] + options
             util.ioretry(lambda: util.pread(command), errlist=[errno.EPIPE, errno.EIO], maxretry=2, nofail=True)
         except util.CommandException, inst:
-            syslog(_syslog.LOG_ERR, 'XOSAN mount failed ' + inst.__str__())
-            raise XOSANException("mount failed with return code %d" % inst.code)
+            syslog(_syslog.LOG_ERR, 'GlusterFS mount failed ' + inst.__str__())
+            raise GlusterFSException("mount failed with return code %d" % inst.code)
 
         # Sanity check to ensure that the user has at least RO access to the
         # mounted share. Windows sharing and security settings can be tricky.
@@ -146,27 +138,27 @@ class XOSANSR(FileSR.FileSR):
         except util.CommandException:
             try:
                 self.unmount(mountpoint, True)
-            except XOSANException:
-                util.logException('XOSANSR.unmount()')
-            raise XOSANException("Permission denied. Please check user privileges.")
+            except GlusterFSException:
+                util.logException('GlusterFSSR.unmount()')
+            raise GlusterFSException("Permission denied. Please check user privileges.")
 
     def unmount(self, mountpoint, rmmountpoint):
         try:
             util.pread(["umount", mountpoint])
         except util.CommandException, inst:
-            raise XOSANException("umount failed with return code %d" % inst.code)
+            raise GlusterFSException("umount failed with return code %d" % inst.code)
         if rmmountpoint:
             try:
                 os.rmdir(mountpoint)
             except OSError, inst:
-                raise XOSANException("rmdir failed with error '%s'" % inst.strerror)
+                raise GlusterFSException("rmdir failed with error '%s'" % inst.strerror)
 
     def attach(self, sr_uuid):
         if not self.checkmount():
             try:
                 self.mount()
                 os.symlink(self.linkpath, self.path)
-            except XOSANException, exc:
+            except GlusterFSException, exc:
                 raise SR.SROSError(12, exc.errstr)
         self.attached = True
 
@@ -194,18 +186,18 @@ class XOSANSR(FileSR.FileSR):
 
     def create(self, sr_uuid, size):
         if self.checkmount():
-            raise SR.SROSError(113, 'XOSAN mount point already attached')
+            raise SR.SROSError(113, 'GlusterFS mount point already attached')
 
         try:
             self.mount()
-        except XOSANException, exc:
+        except GlusterFSException, exc:
             # noinspection PyBroadException
             try:
                 os.rmdir(self.mountpoint)
             except:
                 # we have no recovery strategy
                 pass
-            raise SR.SROSError(111, "XOSAN mount error [opterr=%s]" % exc.errstr)
+            raise SR.SROSError(111, "GlusterFS mount error [opterr=%s]" % exc.errstr)
 
         if util.ioretry(lambda: util.pathexists(self.linkpath)):
             if len(util.ioretry(lambda: util.listdir(self.linkpath))) != 0:
@@ -219,16 +211,16 @@ class XOSANSR(FileSR.FileSR):
                 if inst.code != errno.EEXIST:
                     try:
                         self.unmount(self.mountpoint, True)
-                    except XOSANException:
-                        util.logException('XOSANSR.unmount()')
+                    except GlusterFSException:
+                        util.logException('GlusterFSSR.unmount()')
                     raise SR.SROSError(116,
-                                       "Failed to create XOSAN SR. remote directory creation error: {}".format(
+                                       "Failed to create GlusterFS SR. remote directory creation error: {}".format(
                                            os.strerror(inst.code)))
         self.detach(sr_uuid)
 
     def delete(self, sr_uuid):
         # try to remove/delete non VDI contents first
-        super(XOSANSR, self).delete(sr_uuid)
+        super(GlusterFSSR, self).delete(sr_uuid)
         try:
             if self.checkmount():
                 self.detach(sr_uuid)
@@ -239,21 +231,21 @@ class XOSANSR(FileSR.FileSR):
         except util.CommandException, inst:
             self.detach(sr_uuid)
             if inst.code != errno.ENOENT:
-                raise SR.SROSError(114, "Failed to remove XOSAN mount point")
+                raise SR.SROSError(114, "Failed to remove GlusterFS mount point")
 
     # noinspection PyPep8Naming
     def vdi(self, uuid, loadLocked=False):
         if not loadLocked:
-            return XOSANFileVDI(self, uuid)
-        return XOSANFileVDI(self, uuid)
+            return GlusterFSFileVDI(self, uuid)
+        return GlusterFSFileVDI(self, uuid)
 
 
-class XOSANFileVDI(FileSR.FileVDI):
+class GlusterFSFileVDI(FileSR.FileVDI):
     def attach(self, sr_uuid, vdi_uuid):
         if not hasattr(self, 'xenstore_data'):
             self.xenstore_data = {}
-        self.xenstore_data["storage-type"] = "xosan"
-        return super(XOSANFileVDI, self).attach(sr_uuid, vdi_uuid)
+        self.xenstore_data["storage-type"] = "glusterfs"
+        return super(GlusterFSFileVDI, self).attach(sr_uuid, vdi_uuid)
 
     def generate_config(self, sr_uuid, vdi_uuid):
         util.SMlog("SMBFileVDI.generate_config")
@@ -280,6 +272,6 @@ class XOSANFileVDI(FileSR.FileVDI):
 
 
 if __name__ == '__main__':
-    SRCommand.run(XOSANSR, DRIVER_INFO)
+    SRCommand.run(GlusterFSSR, DRIVER_INFO)
 else:
-    SR.registerSR(XOSANSR)
+    SR.registerSR(GlusterFSSR)
