@@ -27,8 +27,8 @@ def monkeyPatchedNormalizeType(type):
         type = cleanup.SR.TYPE_LVHD
     if type in ["lvm", "lvmoiscsi", "lvmohba", "lvmofcoe"]:
         type = cleanup.SR.TYPE_LVHD
-        # added "glusterfs" to this list
-    if type in ["ext", "nfs", "ocfsoiscsi", "ocfsohba", "smb", "glusterfs"]:
+        # added "gluster" to this list
+    if type in ["ext", "nfs", "ocfsoiscsi", "ocfsohba", "smb", "gluster"]:
         type = cleanup.SR.TYPE_FILE
     if type not in cleanup.SR.TYPES:
         raise util.SMException("Unsupported SR type: %s" % type)
@@ -79,7 +79,7 @@ class GlusterFSSR(FileSR.FileSR):
 
     def handles(sr_type):
         # fudge, because the parent class (FileSR) checks for smb to alter its behavior
-        return sr_type == 'glusterfs' or sr_type == 'smb'
+        return sr_type == 'gluster' or sr_type == 'smb'
 
     handles = staticmethod(handles)
 
@@ -244,7 +244,7 @@ class GlusterFSFileVDI(FileSR.FileVDI):
     def attach(self, sr_uuid, vdi_uuid):
         if not hasattr(self, 'xenstore_data'):
             self.xenstore_data = {}
-        self.xenstore_data["storage-type"] = "glusterfs"
+        self.xenstore_data["storage-type"] = "gluster"
         return super(GlusterFSFileVDI, self).attach(sr_uuid, vdi_uuid)
 
     def generate_config(self, sr_uuid, vdi_uuid):
