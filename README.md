@@ -1,5 +1,5 @@
-## Extra SM drivers for XCP-ng
+## RETIRED: Extra SM drivers for XCP-ng
 
-This repo contains a list of extra drivers for legacy XCP-ng storage stack.
+This repo used to contain a list of extra drivers for legacy XCP-ng storage stack.
 
-For XFS, xfsprogs must be installed.
+Those drivers have been merged into our https://github.com/xcp-ng/sm repository
